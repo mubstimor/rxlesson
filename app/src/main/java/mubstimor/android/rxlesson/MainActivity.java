@@ -1,12 +1,9 @@
 package mubstimor.android.rxlesson;
 
 import android.os.Bundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
-import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
@@ -14,8 +11,11 @@ import android.widget.TextView;
 import io.reactivex.Observable;
 import io.reactivex.Observer;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Function;
 import io.reactivex.functions.Predicate;
+import io.reactivex.observers.DisposableObserver;
 import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
@@ -23,8 +23,8 @@ public class MainActivity extends AppCompatActivity {
     private String greeting = "Hello fron Rx";
     private static final String TAG = MainActivity.class.getSimpleName();
     private Observable<String> animalObservable;
-    private Observer<String> animalObserver;
-    private Disposable disposable;
+    private DisposableObserver<String> animalObserver, animalObserverAllCaps;
+    private CompositeDisposable compositeDisposable = new CompositeDisposable();
     TextView tvGreeting;
 
     @Override
@@ -38,25 +38,39 @@ public class MainActivity extends AppCompatActivity {
         animalObservable = getAnimalsObservable();
 
         animalObserver = getAnimalsObserver();
+        animalObserverAllCaps = getAnimalObserverAllCaps();
 
-        animalObservable.subscribeOn(Schedulers.io())
-                .observeOn(AndroidSchedulers.mainThread())
-                .filter(new Predicate<String>() {
-                    @Override
-                    public boolean test(String s) throws Exception {
-                        return s.toLowerCase().startsWith("b");
-                    }
-                })
-                .subscribe(animalObserver);
+        compositeDisposable.add(
+                animalObservable
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .filter(new Predicate<String>() {
+                        @Override
+                        public boolean test(String s) throws Exception {
+                            return s.toLowerCase().startsWith("b");
+                        }
+                    })
+                    .subscribeWith(animalObserver)
+        );
 
-        FloatingActionButton fab = findViewById(R.id.fab);
-        fab.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-            }
-        });
+        compositeDisposable.add(
+                animalObservable
+                    .subscribeOn(Schedulers.io())
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .filter(new Predicate<String>() {
+                        @Override
+                        public boolean test(String s) throws Exception {
+                            return s.toLowerCase().startsWith("c");
+                        }
+                    })
+                    .map(new Function<String, String>() {
+                        @Override
+                        public String apply(String s) throws Exception {
+                            return s.toUpperCase();
+                        }
+                    })
+                    .subscribeWith(animalObserverAllCaps)
+        );
     }
 
     private Observable<String> getAnimalsObservable() {
@@ -68,14 +82,8 @@ public class MainActivity extends AppCompatActivity {
                 "Fox", "Frog");
     }
 
-    private Observer<String> getAnimalsObserver() {
-        return new Observer<String>() {
-            @Override
-            public void onSubscribe(Disposable d) {
-                disposable = d;
-                Log.i(TAG, "onSubscribe");
-            }
-
+    private DisposableObserver<String> getAnimalsObserver() {
+        return new DisposableObserver<String>() {
             @Override
             public void onNext(String s) {
                 Log.i(TAG, "Name: " + s);
@@ -94,10 +102,29 @@ public class MainActivity extends AppCompatActivity {
         };
     }
 
+    private DisposableObserver<String> getAnimalObserverAllCaps() {
+        return new DisposableObserver<String>() {
+            @Override
+            public void onNext(String s) {
+                Log.d(TAG, "Name: " + s);
+            }
+
+            @Override
+            public void onError(Throwable e) {
+                Log.d(TAG, "onError: " + e.getMessage());
+            }
+
+            @Override
+            public void onComplete() {
+                Log.d(TAG, "All items are emitted!");
+            }
+        };
+    }
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        disposable.dispose();
+        compositeDisposable.clear();
     }
 
     @Override
