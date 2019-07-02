@@ -5,6 +5,7 @@ import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -12,16 +13,17 @@ import android.widget.TextView;
 
 import io.reactivex.Observable;
 import io.reactivex.Observer;
-import io.reactivex.Scheduler;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Predicate;
 import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
 
     private String greeting = "Hello fron Rx";
-    private Observable<String> myObservable;
-    private Observer<String> myObserver;
+    private static final String TAG = MainActivity.class.getSimpleName();
+    private Observable<String> animalObservable;
+    private Observer<String> animalObserver;
     private Disposable disposable;
     TextView tvGreeting;
 
@@ -33,34 +35,19 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(toolbar);
         tvGreeting = (TextView)findViewById(R.id.tvGreeting);
 
-        myObservable = Observable.just(greeting);
+        animalObservable = getAnimalsObservable();
 
-        myObservable.subscribeOn(Schedulers.io());
-        myObservable.observeOn(AndroidSchedulers.mainThread());
+        animalObserver = getAnimalsObserver();
 
-        myObserver = new Observer<String>() {
-            @Override
-            public void onSubscribe(Disposable d) {
-                disposable = d;
-            }
-
-            @Override
-            public void onNext(String s) {
-                tvGreeting.setText(s);
-            }
-
-            @Override
-            public void onError(Throwable e) {
-
-            }
-
-            @Override
-            public void onComplete() {
-
-            }
-        };
-
-        myObservable.subscribe(myObserver);
+        animalObservable.subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .filter(new Predicate<String>() {
+                    @Override
+                    public boolean test(String s) throws Exception {
+                        return s.toLowerCase().startsWith("b");
+                    }
+                })
+                .subscribe(animalObserver);
 
         FloatingActionButton fab = findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -70,6 +57,41 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
+    }
+
+    private Observable<String> getAnimalsObservable() {
+        return Observable.fromArray(
+                "Ant", "Ape",
+                "Bat", "Bee", "Bear", "Butterfly",
+                "Cat", "Crab", "Cod",
+                "Dog", "Dove",
+                "Fox", "Frog");
+    }
+
+    private Observer<String> getAnimalsObserver() {
+        return new Observer<String>() {
+            @Override
+            public void onSubscribe(Disposable d) {
+                disposable = d;
+                Log.i(TAG, "onSubscribe");
+            }
+
+            @Override
+            public void onNext(String s) {
+                Log.i(TAG, "Name: " + s);
+                tvGreeting.setText(s);
+            }
+
+            @Override
+            public void onError(Throwable e) {
+                Log.i(TAG, e.getMessage());
+            }
+
+            @Override
+            public void onComplete() {
+                Log.i(TAG, "All items are emitted!");
+            }
+        };
     }
 
     @Override
