@@ -4,27 +4,24 @@ import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.widget.TextView;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import io.reactivex.Observable;
-import io.reactivex.Observer;
+import io.reactivex.ObservableEmitter;
+import io.reactivex.ObservableOnSubscribe;
 import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
-import io.reactivex.disposables.Disposable;
 import io.reactivex.functions.Function;
-import io.reactivex.functions.Predicate;
 import io.reactivex.observers.DisposableObserver;
 import io.reactivex.schedulers.Schedulers;
 
 public class MainActivity extends AppCompatActivity {
 
-    private String greeting = "Hello fron Rx";
     private static final String TAG = MainActivity.class.getSimpleName();
-    private Observable<String> animalObservable;
-    private DisposableObserver<String> animalObserver, animalObserverAllCaps;
-    private CompositeDisposable compositeDisposable = new CompositeDisposable();
+    private CompositeDisposable disposable = new CompositeDisposable();
     TextView tvGreeting;
 
     @Override
@@ -33,119 +30,77 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Toolbar toolbar = findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        tvGreeting = (TextView)findViewById(R.id.tvGreeting);
+        tvGreeting = (TextView) findViewById(R.id.tvGreeting);
 
-        animalObservable = getAnimalsObservable();
+        disposable.add(getNotesObservable()
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .map(new Function<Note, Note>() {
+                    @Override
+                    public Note apply(Note note) throws Exception {
+                        // Making the note to all uppercase
+                        note.setNote(note.getNote().toUpperCase());
+                        return note;
+                    }
+                })
+                .subscribeWith(getNotesObserver()));
 
-        animalObserver = getAnimalsObserver();
-        animalObserverAllCaps = getAnimalObserverAllCaps();
-
-        compositeDisposable.add(
-                animalObservable
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .filter(new Predicate<String>() {
-                        @Override
-                        public boolean test(String s) throws Exception {
-                            return s.toLowerCase().startsWith("b");
-                        }
-                    })
-                    .subscribeWith(animalObserver)
-        );
-
-        compositeDisposable.add(
-                animalObservable
-                    .subscribeOn(Schedulers.io())
-                    .observeOn(AndroidSchedulers.mainThread())
-                    .filter(new Predicate<String>() {
-                        @Override
-                        public boolean test(String s) throws Exception {
-                            return s.toLowerCase().startsWith("c");
-                        }
-                    })
-                    .map(new Function<String, String>() {
-                        @Override
-                        public String apply(String s) throws Exception {
-                            return s.toUpperCase();
-                        }
-                    })
-                    .subscribeWith(animalObserverAllCaps)
-        );
     }
 
-    private Observable<String> getAnimalsObservable() {
-        return Observable.fromArray(
-                "Ant", "Ape",
-                "Bat", "Bee", "Bear", "Butterfly",
-                "Cat", "Crab", "Cod",
-                "Dog", "Dove",
-                "Fox", "Frog");
-    }
+    private DisposableObserver<Note> getNotesObserver() {
+        return new DisposableObserver<Note>() {
 
-    private DisposableObserver<String> getAnimalsObserver() {
-        return new DisposableObserver<String>() {
             @Override
-            public void onNext(String s) {
-                Log.i(TAG, "Name: " + s);
-                tvGreeting.setText(s);
+            public void onNext(Note note) {
+                tvGreeting.setText("Note: " + note.getNote());
+                Log.d(TAG, "Note: " + note.getNote());
             }
 
             @Override
             public void onError(Throwable e) {
-                Log.i(TAG, e.getMessage());
+                Log.e(TAG, "onError: " + e.getMessage());
             }
 
             @Override
             public void onComplete() {
-                Log.i(TAG, "All items are emitted!");
+                Log.d(TAG, "All notes are emitted!");
             }
         };
     }
 
-    private DisposableObserver<String> getAnimalObserverAllCaps() {
-        return new DisposableObserver<String>() {
-            @Override
-            public void onNext(String s) {
-                Log.d(TAG, "Name: " + s);
-            }
+    private Observable<Note> getNotesObservable() {
+        final List<Note> notes = prepareNotes();
 
+        return Observable.create(new ObservableOnSubscribe<Note>() {
             @Override
-            public void onError(Throwable e) {
-                Log.d(TAG, "onError: " + e.getMessage());
-            }
+            public void subscribe(ObservableEmitter<Note> emitter) throws Exception {
+                for (Note note : notes) {
+                    if (!emitter.isDisposed()) {
+                        emitter.onNext(note);
+                    }
+                }
 
-            @Override
-            public void onComplete() {
-                Log.d(TAG, "All items are emitted!");
+                if (!emitter.isDisposed()) {
+                    emitter.onComplete();
+                }
             }
-        };
+        });
+    }
+
+    private List<Note> prepareNotes() {
+        List<Note> notes = new ArrayList<>();
+        notes.add(new Note(1, "buy tooth paste!"));
+        notes.add(new Note(2, "call brother!"));
+        notes.add(new Note(3, "watch narcos tonight!"));
+        notes.add(new Note(4, "pay power bill!"));
+
+        return notes;
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        compositeDisposable.clear();
+        disposable.clear();
     }
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        int id = item.getItemId();
-
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
-        }
-
-        return super.onOptionsItemSelected(item);
-    }
 }
